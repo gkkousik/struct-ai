@@ -1,110 +1,220 @@
-# Structura AI — Node.js + Express + MongoDB
+<div align="center">
 
-This is a full rewrite of Structura AI's backend from Flask/SQLAlchemy to
-**Node.js (Express) with MongoDB (Mongoose)**. All UI/UX, themes, diagram
-types, and the PlantUML/Groq integration are preserved (and several bugs in
-the original codebase are fixed — see below).
+<img src="public/com_logo.png" alt="Structura AI Logo" width="100" />
 
-## What changed / what was fixed
+# Structura AI
 
-1. **Broken `app.py`** — the original Flask file shipped with the `THEMES`
-   dict cut off after one partial entry, and `DIAGRAM_PROMPTS` was referenced
-   in `call_groq()` but **never defined anywhere**. Every `/generate` call
-   would have crashed with a `NameError`. This rewrite ships a complete set
-   of 9 themes and 10 diagram-type prompts in `utils/themes.js` and
-   `utils/diagramCatalogue.js`.
-2. **No real Node/MongoDB storage** — `storage_service/` only contained a
-   `package.json`; there was no `server.js`, no models, nothing wired up.
-   This is now a full Express app with Mongoose models for `User` and
-   `Diagram`.
-3. **Signup / login / history now persist properly in MongoDB:**
-   - `models/User.js` — username/email (unique, indexed), bcrypt-hashed
-     password (hashing happens automatically in a pre-save hook — plaintext
-     passwords are never stored).
-   - `models/Diagram.js` — one document per generated diagram, linked to the
-     owning user via `ObjectId` ref, with the rendered PNG stored directly as
-     `Buffer` in MongoDB (so history works identically on any host — no
-     reliance on a local disk that can be wiped on redeploy).
-   - **Sessions are stored in MongoDB too** (`connect-mongo`), so logins
-     survive server restarts and work correctly even behind a load balancer
-     with multiple instances — the original Flask app used Flask's
-     client-side signed cookie sessions, which is fine, but doesn't give you
-     server-side revocation or a session store you can inspect/manage.
-4. **Security hardening:** bcrypt cost factor 12, `httpOnly`/`sameSite`
-   cookies, secure cookies in production, and rate limiting on
-   `/login`, `/signup`, and `/generate` to slow down brute-force/abuse.
-5. **Diagram image serving** — images are streamed straight from MongoDB at
-   `/diagram/:id/image` with an ownership check, instead of relying on
-   filesystem paths.
+### AI-Powered UML Diagram Generator
 
-## Project structure
+**Turn a project title into a professional UML diagram in seconds.**
+Powered by Groq LLaMA · Rendered by PlantUML · Stored in MongoDB Atlas
+
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4.x-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
+[![Groq](https://img.shields.io/badge/Groq-LLaMA_3.3_70B-F55036?style=flat-square)](https://groq.com)
+[![Deployed on Render](https://img.shields.io/badge/Deployed_on-Render-46E3B7?style=flat-square&logo=render&logoColor=white)](https://render.com)
+
+### 🚀 [**Live Demo → structai-wptr.onrender.com**](https://structai-wptr.onrender.com/)
+
+</div>
+
+---
+
+## What is Structura AI?
+
+Structura AI is a full-stack web application that generates professional UML diagrams from a plain-text project description using a large language model. A user enters a project title, selects a diagram type and visual theme, and the system uses **Groq's LLaMA 3.3 70B** model to produce valid PlantUML syntax — which is then rendered into a PNG diagram by the PlantUML rendering API and saved to the user's history in MongoDB.
+
+> ⚠️ The app is hosted on Render's free tier, so the first request after a period of inactivity may take 30–60 seconds while the instance cold-starts.
+
+---
+
+## Key Features
+
+- **10 UML diagram types** — Class, Sequence, Use Case, Activity, Component, Deployment, State, Object, Timing, and ER diagrams
+- **9 visual themes** — Classic Blue, Dark Neon, Sunset Orange, Forest Green, Royal Purple, Midnight Dark, Ocean Teal, Rose Gold, and Default
+- **Persistent diagram history** — every generated diagram (including its rendered PNG) is stored in MongoDB and viewable/downloadable from the history page at any time
+- **Secure authentication** — bcrypt password hashing (cost factor 12), server-side sessions persisted in MongoDB via `connect-mongo`, `httpOnly` + `sameSite` cookies, rate limiting on auth and generation endpoints
+- **One-click PNG download** — download any diagram directly from the history page
+- **Fully deployed** — live on Render with MongoDB Atlas as the cloud database
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Runtime** | Node.js 18+ |
+| **Framework** | Express.js |
+| **Templating** | EJS + ejs-mate (layouts) |
+| **Database** | MongoDB Atlas (Mongoose ODM) |
+| **AI / LLM** | Groq API — LLaMA 3.3 70B Versatile |
+| **Diagram Rendering** | PlantUML public rendering API |
+| **Auth** | bcryptjs + express-session + connect-mongo |
+| **Styling** | Tailwind CSS (CDN) + custom glassmorphism UI |
+| **Deployment** | Render (Node web service) |
+| **Security** | express-rate-limit, proxy-aware secure cookies |
+
+---
+
+## Architecture Overview
 
 ```
-server.js              Express app entry point
-config/db.js           MongoDB connection
-models/User.js         User schema + bcrypt hook
-models/Diagram.js      Diagram/history schema
-routes/auth.js         /login /signup /logout
-routes/app.js          / /try /history /generate /api/history /diagram/:id/image
-middleware/auth.js     loginRequired / apiLoginRequired guards
-utils/plantuml.js      PlantUML text-encoding + rendering (port of the Python logic)
-utils/groq.js          Groq AI client + PlantUML syntax cleanup
-utils/themes.js        9 visual skinparam themes
-utils/diagramCatalogue.js  10 diagram types + their Groq prompt templates
-views/                 EJS templates (layout.ejs + page templates, via ejs-mate)
-public/                Static assets (logo, etc.)
+Browser
+  │
+  ├── GET  /try          →  EJS template (generate.ejs)
+  │
+  └── POST /generate
+          │
+          ├── Groq API (LLaMA 3.3 70B)
+          │     └── returns PlantUML syntax
+          │
+          ├── PlantUML Rendering API
+          │     └── returns PNG (Buffer)
+          │
+          └── MongoDB Atlas
+                ├── diagrams  collection  ← PNG + syntax + metadata saved
+                ├── users     collection  ← bcrypt-hashed credentials
+                └── sessions  collection  ← server-side session store
 ```
 
-## Setup
+The PlantUML encoding is a JavaScript port of the standard zlib/base64 algorithm — raw-deflate compressed, then mapped through PlantUML's custom URL-safe alphabet — keeping the rendering pipeline dependency-free on the server side.
 
-1. **Install dependencies**
-   ```bash
+---
+
+## Project Structure
+
+```
+├── server.js                  Express entry point, session config, middleware
+├── config/
+│   └── db.js                  MongoDB connection with reconnection handling
+├── models/
+│   ├── User.js                Mongoose schema — bcrypt pre-save hook
+│   └── Diagram.js             Mongoose schema — PNG stored as Buffer
+├── routes/
+│   ├── auth.js                /login  /signup  /logout
+│   └── app.js                 /  /try  /history  /generate  /api/history
+├── middleware/
+│   └── auth.js                loginRequired / apiLoginRequired guards
+├── utils/
+│   ├── groq.js                Groq API client + PlantUML syntax cleanup
+│   ├── plantuml.js            PlantUML text encoder + PNG fetcher
+│   ├── themes.js               9 skinparam theme definitions
+│   └── diagramCatalogue.js    10 diagram types + LLM prompt templates
+└── views/
+    ├── layout.ejs              Base layout (navbar, footer, particle canvas)
+    ├── index.ejs                Landing page
+    ├── login.ejs                Login page
+    ├── signup.ejs               Signup with live password strength meter
+    ├── generate.ejs             Diagram generator UI
+    └── history.ejs              Saved diagrams grid + detail modal
+```
+
+---
+
+## Getting Started (Local Development)
+
+### 1. Install dependencies
+```bash
+npm install
+```
+
+### 2. Configure environment
+Copy `.env.example` to `.env` and fill in your own values:
+```bash
+cp .env.example .env
+```
+
+| Variable | Description |
+|---|---|
+| `MONGODB_URI` | Local (`mongodb://127.0.0.1:27017/structura`) or MongoDB Atlas connection string. **Make sure the database name (e.g. `/structura`) is included in the path** — otherwise Mongoose silently defaults to a database called `test`. |
+| `SESSION_SECRET` | Any long, random string. Generate one with `openssl rand -hex 32`. |
+| `GROQ_API_KEY` | From [console.groq.com/keys](https://console.groq.com/keys) — must start with `gsk_`. |
+| `PORT` | Local dev port (default `5000`). Not needed in production — Render sets this automatically. |
+| `NODE_ENV` | `development` locally, `production` when deployed. |
+
+### 3. Run MongoDB locally (or use Atlas — no local install needed)
+```bash
+# macOS (Homebrew)
+brew services start mongodb-community
+
+# or Docker
+docker run -d -p 27017:27017 --name structura-mongo mongo:7
+```
+
+### 4. Start the server
+```bash
+npm start      # production mode
+npm run dev    # nodemon — auto-restarts on file changes
+```
+
+### 5. Open it
+```
+http://localhost:5000
+```
+
+---
+
+## Deploying to Render
+
+The app is live at **https://structai-wptr.onrender.com/**, deployed as a Render Web Service. To deploy your own instance:
+
+1. Push this repo to GitHub.
+2. On Render: **New → Web Service** → connect the repo.
+3. **Language:** Node
+4. **Build Command:**
+   ```
    npm install
    ```
-
-2. **Configure environment** — copy `.env.example` to `.env` and fill in:
-   ```bash
-   cp .env.example .env
+5. **Start Command:**
    ```
-   - `MONGODB_URI` — local Mongo (`mongodb://127.0.0.1:27017/structura`) or an
-     Atlas connection string.
-   - `SESSION_SECRET` — any long random string.
-   - `GROQ_API_KEY` — from https://console.groq.com/keys (must start with `gsk_`).
-
-3. **Run MongoDB** locally (or use MongoDB Atlas — no local install needed):
-   ```bash
-   # macOS (Homebrew)
-   brew services start mongodb-community
-   # or Docker
-   docker run -d -p 27017:27017 --name structura-mongo mongo:7
+   node server.js
    ```
+   > Render does **not** read the `Procfile` automatically (that's a Heroku convention) — the Start Command must be set explicitly here or in a `render.yaml` blueprint.
+6. **Environment Variables** — add `MONGODB_URI`, `SESSION_SECRET`, `GROQ_API_KEY`, and `NODE_ENV=production` (see table above).
+7. **Health Check Path:** `/health`
+8. Click **Deploy Web Service**.
 
-4. **Start the server**
-   ```bash
-   npm start          # production
-   npm run dev        # nodemon, auto-restart on changes
-   ```
+Any Node-friendly host (Railway, Fly.io, etc.) works the same way — just set the same environment variables and use `node server.js` as the start command.
 
-5. Visit `http://localhost:5000`.
+---
 
-## Deploying
+## What Makes This Interesting (Engineering Notes)
 
-Works on Render, Railway, Fly.io, or any Node host — just set the three
-environment variables above (use MongoDB Atlas for the database in
-production). The `Procfile` is already set to `web: node server.js`.
+**PNG storage in MongoDB** — rendered diagrams are stored as `Buffer` directly in the `diagrams` collection rather than on the filesystem. This means history is portable across deployments, works correctly on ephemeral PaaS hosts like Render where the local filesystem is wiped on each deploy, and requires no object storage service (S3, GCS, etc.) to operate.
 
-## API surface (unchanged route names from the original app)
+**LLM output sanitization** — the Groq response goes through a cleaning pipeline before being sent to PlantUML: markdown fences are stripped, `!theme` directives are removed (they cause rendering failures on the public server), double braces from LLM hallucinations are collapsed to single braces, and the skinparam theme block is injected at the correct position inside the `@startuml` block. If the LLM omits the `@startuml`/`@enduml` tags entirely, they are added automatically.
 
-| Method | Route                     | Auth | Description                        |
-|--------|---------------------------|------|-------------------------------------|
-| GET    | `/`                       | no   | Landing page                        |
-| GET/POST | `/signup`               | no   | Create account                      |
-| GET/POST | `/login`                | no   | Log in                              |
-| GET    | `/logout`                 | yes  | Destroy session                     |
-| GET    | `/try`                    | yes  | Diagram generator UI                |
-| POST   | `/generate`               | yes  | Generate + save a diagram           |
-| GET    | `/history`                | yes  | History page (HTML)                 |
-| GET    | `/api/history`            | yes  | History as JSON                     |
-| DELETE | `/api/history/:id`        | yes  | Delete a diagram                    |
-| GET    | `/diagram/:id/image`      | yes  | Stream a diagram's PNG from MongoDB |
-| GET    | `/health`                 | no   | Health check                        |
+**Proxy-aware session security** — Render terminates TLS at its edge and forwards plain HTTP internally. Without `app.set('trust proxy', 1)` and `secure: 'auto'` on the session cookie, Express would silently refuse to send the session cookie over what it perceives as an insecure connection — causing login to silently fail even with correct credentials. Both are correctly configured.
+
+**Safe history rendering** — diagram syntax and metadata shown on the history page are passed to the browser via HTML `data-*` attributes (which EJS auto-escapes), rather than being spliced into inline `onclick` JavaScript strings. This avoids the page breaking (or an XSS hole opening up) when AI-generated PlantUML syntax contains quotes, angle brackets, or other special characters.
+
+**Rate limiting** — login/signup endpoints are limited to 30 requests per 15-minute window; the `/generate` endpoint is limited to 10 requests per minute, protecting both the Groq API quota and the MongoDB write budget.
+
+---
+
+## API Endpoints
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| `GET` | `/` | — | Landing page |
+| `GET/POST` | `/signup` | — | Create account |
+| `GET/POST` | `/login` | — | Authenticate |
+| `GET` | `/logout` | ✓ | Destroy session |
+| `GET` | `/try` | ✓ | Generator UI |
+| `POST` | `/generate` | ✓ | Generate + persist diagram |
+| `GET` | `/history` | ✓ | History page |
+| `GET` | `/api/history` | ✓ | History as JSON |
+| `DELETE` | `/api/history/:id` | ✓ | Delete a diagram |
+| `GET` | `/diagram/:id/image` | ✓ | Stream PNG from MongoDB |
+| `GET` | `/health` | — | Health check |
+
+---
+
+<div align="center">
+
+Built with Node.js · Express · MongoDB · Groq AI · PlantUML
+
+**[structai-wptr.onrender.com](https://structai-wptr.onrender.com/)**
+
+</div>
