@@ -75,6 +75,6 @@ const SYSTEM_PROMPT =
   'Output ONLY valid PlantUML starting with @startuml and ending with @enduml. ' +
   'No markdown fences, no explanations.';
 
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
 module.exports = { DIAGRAM_TYPES, DIAGRAM_PROMPTS, SYSTEM_PROMPT, GROQ_MODELS };
