@@ -75,6 +75,6 @@ const SYSTEM_PROMPT =
   'Output ONLY valid PlantUML starting with @startuml and ending with @enduml. ' +
   'No markdown fences, no explanations.';
 
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const GROQ_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
 module.exports = { DIAGRAM_TYPES, DIAGRAM_PROMPTS, SYSTEM_PROMPT, GROQ_MODELS };
